@@ -1,0 +1,18 @@
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Configuraciones de editores de código (VS Code, PhpStorm, etc.)
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Archivos de Logs
+*.log
+
+# Por si en el futuro instalan librerías con npm para el frontend
+node_modules/
