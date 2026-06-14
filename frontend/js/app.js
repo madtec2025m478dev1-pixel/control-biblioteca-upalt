@@ -1,79 +1,93 @@
-// --- LÓGICA DE JAVASCRIPT (script.js) ---
+// frontend/js/app.js
 
-// 1. Datos iniciales (Si no hay nada en localStorage, cargamos estos de muestra)
-let libros = JSON.parse(localStorage.getItem('libros')) || [
-    { id: 1, titulo: "El Aleph", autor: "Jorge Luis Borges", estado: "Disponible" },
-    { id: 2, titulo: "Don Quijote de la Mancha", autor: "Miguel de Cervantes", estado: "Prestado" }
-];
+let librosLocales = [];
 
-const form = document.getElementById('libro-form');
-const tabla = document.getElementById('tabla-libros');
-
-// 2. Función para renderizar la lista en el HTML
-function renderizarLibros() {
-    tabla.innerHTML = ''; // Limpiar tabla
-    
-    libros.forEach(libro => {
-        const row = document.createElement('tr');
-        
-        // Determinar la clase CSS según el estado
-        const claseEstado = libro.estado === 'Disponible' ? 'status-disponible' : 'status-prestado';
-
-        row.innerHTML = `
-            <td><strong>${libro.titulo}</strong></td>
-            <td>${libro.autor}</td>
-            <td><span class="status ${claseEstado}">${libro.estado}</span></td>
-            <td>
-                <button class="btn-action" onclick="cambiarEstado(${libro.id})">
-                    ${libro.estado === 'Disponible' ? 'Prestar' : 'Devolver'}
-                </button>
-                | 
-                <button class="btn-action" style="color: #ef4444;" onclick="eliminarLibro(${libro.id})">
-                    Eliminar
-                </button>
-            </td>
-        `;
-        tabla.appendChild(row);
-    });
-
-    // Guardar en el almacenamiento del navegador
-    localStorage.setItem('libros', JSON.stringify(libros));
+// NUEVO: Función para cargar libros desde la base de datos al iniciar la página
+function cargarLibrosDesdeBD() {
+    fetch('../backend/obtener_libros.php')
+        .then(response => {
+            if (!response.ok) throw new Error("Error en el servidor");
+            return response.json();
+        })
+        .then(data => {
+            if (data.exito) {
+                // Si la consulta fue exitosa, guardamos los libros y pintamos la tabla
+                librosLocales = data.libros;
+                renderizarTabla();
+            } else {
+                console.error("Error al cargar inventario:", data.mensaje);
+            }
+        })
+        .catch(error => {
+            console.error("Error en petición fetch:", error);
+        });
 }
 
-// 3. Evento para registrar un nuevo libro
-form.addEventListener('submit', (e) => {
-    e.preventDefault(); 
+// Función para pintar la tabla con los datos que tenemos en memoria
+function renderizarTabla() {
+    const tabla = document.getElementById('tabla-libros');
+    tabla.innerHTML = ''; 
+    
+    // Si no hay libros, mostramos un mensaje
+    if (librosLocales.length === 0) {
+        tabla.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#6b7280;">No hay libros en el inventario.</td></tr>';
+        return;
+    }
 
+    // Recorremos los libros y los pintamos en el HTML
+    librosLocales.forEach(libro => {
+        // Aseguramos el estado, si no trae, le ponemos Disponible por defecto
+        const estadoLibro = libro.estado ? libro.estado : 'Disponible';
+        const claseEstado = estadoLibro === 'Disponible' ? 'status-disponible' : 'status-prestado';
+        
+        tabla.innerHTML += `
+            <tr>
+                <td><code>${libro.codigo}</code></td>
+                <td><strong>${libro.titulo}</strong></td>
+                <td>${libro.autor}</td>
+                <td><span class="status ${claseEstado}">${estadoLibro}</span></td>
+            </tr>`;
+    });
+}
+
+// EJECUTAR AL CARGAR LA PÁGINA: Traer los libros de la base de datos
+document.addEventListener('DOMContentLoaded', cargarLibrosDesdeBD);
+
+// Escuchar el clic en "Agregar a Biblioteca"
+document.getElementById('libro-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    // Capturamos lo que el usuario escribió
     const nuevoLibro = {
-        id: Date.now(), 
+        codigo: document.getElementById('codigo').value,
         titulo: document.getElementById('titulo').value,
         autor: document.getElementById('autor').value,
-        estado: document.getElementById('estado').value
+        estado: "Disponible" // Por defecto al registrar, está disponible
     };
 
-    libros.push(nuevoLibro);
-    renderizarLibros();
-    form.reset(); 
-});
-
-// 4. Función para cambiar el estado (Prestar/Devolver)
-window.cambiarEstado = function(id) {
-    libros = libros.map(libro => {
-        if (libro.id === id) {
-            libro.estado = libro.estado === 'Disponible' ? 'Prestado' : 'Disponible';
+    // Usamos fetch para enviarlo al servidor PHP (Backend)
+    fetch('../backend/guardar_libro.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(nuevoLibro)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.exito) {
+            // Si PHP dice que se guardó bien, volvemos a cargar la lista desde la BD
+            // para que traiga el ID real y se mantenga sincronizada
+            cargarLibrosDesdeBD();
+            alert("✅ " + data.mensaje);
+            e.target.reset(); // Limpia el formulario
+        } else {
+            // Si hubo un error (ej. código duplicado), mostramos el mensaje
+            alert("❌ Error: " + data.mensaje);
         }
-        return libro;
+    })
+    .catch(error => {
+        console.error("Error en la petición:", error);
+        alert("❌ Error de conexión con el servidor.");
     });
-    renderizarLibros();
-};
-
-// 5. NUEVA FUNCIÓN: Eliminar un libro por completo
-window.eliminarLibro = function(id) {
-    if (confirm('¿Estás seguro de que deseas eliminar este libro?')) {
-        libros = libros.filter(libro => libro.id !== id);
-        renderizarLibros();
-    }
-};
-
-// Inicializar la vista al cargar la página
-renderizarLibros();
+});
